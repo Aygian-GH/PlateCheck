@@ -1,0 +1,31 @@
+Nutrition Awareness Internship Project
+
+Project Names:
+
+1. Nutrino
+2. MacroMate
+3. PlateCheck
+
+Project Plans:
+
+1. Calorie Tracker
+2. BMI Adapter/Tracker
+3. Calorie/Nutrition Analysis
+4. Diet Instruction AI
+5. Progress Reports
+6. Planner
+7. Diet Options (Vegan/Vegetarian/Non-Vegetarian/Eggitarian)
+
+Web Application:
+
+1. Sign-Up/Login (No Email IDs)
+2. Profile (User Details / Body Details)
+3. Image Upload (PP.3)
+4. Dashboard
+
+TechStack:
+
+1. Python (Django for Web Framework)
+2. TensorFlow-Keras or Ultralytics (Image Anaylysis Models)
+3. LLM Gen AI API (Gemini?)
+4. 
