@@ -144,3 +144,9 @@ def dashboard_view(request):
         # 'today_summary': get_today_summary(request.user),
     }
     return render(request, 'dashboard.html', context)
+
+def chatbot_view(request):
+    """
+    Chatbot page for nutrition questions and assistance.
+    """
+    return render(request, 'chatbot.html')
