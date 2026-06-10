@@ -1,0 +1,7 @@
+Plans/
+__pycache__/
+NAIPEnv/
+*.log
+.vscode/
+Non-Push .bat files/
+test work/
