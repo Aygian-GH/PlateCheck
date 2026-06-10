@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>PlateCheck - Complete Profile</title>
+        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+        <style>
+            *{margin:0;padding:0;box-sizing:border-box}
+            body{
+                font-family:Poppins,sans-serif;
+                background:#0f172a;
+                display:flex;
+                justify-content:center;
+                align-items:center;
+                min-height:100vh;
+                padding:30px;
+            }
+
+            .card{
+                width:100%;
+                max-width:800px;
+                background:#111827;
+                border:1px solid #2b3548;
+                border-radius:28px;
+                padding:35px;
+                color:white;
+            }
+
+                h1{text-align:center;margin-bottom:8px}
+                .sub{text-align:center;color:#9ca3af;margin-bottom:30px}
+                .grid{
+                display:grid;
+                grid-template-columns:1fr 1fr;
+                gap:16px;
+            }
+
+                input,select{
+                width:100%;
+                padding:14px;
+                border-radius:12px;
+                border:1px solid #374151;
+                background:#0b1220;
+                color:white;
+            }
+
+            .full{grid-column:1/-1}
+            .btn{
+                width:100%;
+                margin-top:25px;
+                padding:15px;
+                border:none;
+                border-radius:14px;
+                background:#22c55e;
+                color:white;
+                font-weight:600;
+                font-size:16px;
+            }
+
+            label{
+                display:block;
+                margin-bottom:6px;
+                font-size:14px;
+                color:#cbd5e1;
+            }
+            .field{display:flex;flex-direction:column}
+
+        </style>
+    </head>
+
+    <body>
+        <div class="card">
+            <h1>Complete Your Profile</h1>
+            <p class="sub">Tell us about yourself</p>
+
+            <div class="grid">
+                <div class="field">
+                <label>Full Name</label>
+                <input type="text" placeholder="Enter name">
+            </div>
+
+            <div class="field">
+                <label>Username</label>
+                <input type="text" placeholder="Enter username">
+            </div>
+
+            <div class="field">
+                <label>Age</label>
+                <input type="number" placeholder="Age">
+            </div>
+
+            <div class="field">
+                <label>Gender</label>
+                <select>
+                <option>Male</option>
+                <option>Female</option>
+                <option>Other</option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label>Height (cm)</label>
+                <input type="number" placeholder="Height">
+            </div>
+
+            <div class="field">
+                <label>Weight (kg)</label>
+                <input type="number" placeholder="Weight">
+            </div>
+
+            <div class="field">
+                <label>Goal</label>
+                <select>
+                <option>Lose Weight</option>
+                <option>Gain Weight</option>
+                <option>Build Muscle</option>
+                <option>Maintain Weight</option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label>Diet Type</label>
+                <select>
+                <option>Vegetarian</option>
+                <option>Non-Vegetarian</option>
+                <option>Vegan</option>
+                <option>Eggetarian</option>
+                </select>
+            </div>
+
+            <div class="field full">
+                <label>Activity Level</label>
+                <select>
+                <option>Sedentary</option>
+                <option>Lightly Active</option>
+                <option>Moderately Active</option>
+                <option>Very Active</option>
+                </select>
+            </div>
+
+            </div>
+
+            <button class="btn" type="button">Save Profile</button>
+
+        </div>
+    </body>
+</html>
