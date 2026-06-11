@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ronnie AI</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -223,6 +224,30 @@
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-thumb { background: #475569; border-radius: 20px; }
 
+        /* Markdown rendering inside bot messages */
+        .message.bot ul, .message.bot ol,
+        .message[data-markdown] ul, .message[data-markdown] ol {
+            margin: 8px 0 8px 20px;
+        }
+        .message.bot li, .message[data-markdown] li {
+            margin-bottom: 4px;
+        }
+        .message.bot p, .message[data-markdown] p {
+            margin-bottom: 8px;
+        }
+        .message.bot p:last-child, .message[data-markdown] p:last-child {
+            margin-bottom: 0;
+        }
+        .message.bot strong, .message[data-markdown] strong {
+            color: #e2e8f0;
+        }
+        .message.bot code, .message[data-markdown] code {
+            background: rgba(255,255,255,0.1);
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
         /* Empty state */
         .empty-state {
             flex: 1;
@@ -267,7 +292,11 @@
                 </div>
             {% else %}
                 {% for msg in chat_history %}
-                    <div class="message {{ msg.role }}">{{ msg.content }}</div>
+                    {% if msg.role == 'assistant' %}
+                        <div class="message bot" data-markdown>{{ msg.content }}</div>
+                    {% else %}
+                        <div class="message user">{{ msg.content }}</div>
+                    {% endif %}
                 {% endfor %}
             {% endif %}
 
@@ -303,6 +332,12 @@
     <script>
         // Auto-scroll to bottom on load
         const chatBody = document.getElementById('chatBody');
+
+        // Render markdown in any existing bot messages loaded from DB
+        document.querySelectorAll('.message[data-markdown]').forEach(el => {
+            el.innerHTML = marked.parse(el.textContent);
+        });
+
         chatBody.scrollTop = chatBody.scrollHeight;
 
         // Fill input from suggestion chips
@@ -372,7 +407,11 @@
         function appendMessage(role, text) {
             const div = document.createElement('div');
             div.className = 'message ' + role;
-            div.textContent = text;
+            if (role === 'bot') {
+                div.innerHTML = marked.parse(text);
+            } else {
+                div.textContent = text;
+            }
             // Insert before typing indicator
             const indicator = document.getElementById('typingIndicator');
             chatBody.insertBefore(div, indicator);
