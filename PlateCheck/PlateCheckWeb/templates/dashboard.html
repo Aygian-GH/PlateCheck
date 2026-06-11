@@ -8,25 +8,48 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            transition: background-color 0.3s ease, color 0.3s ease;
-        }
+        body { font-family: 'Inter', sans-serif; transition: background-color 0.3s ease, color 0.3s ease; }
     </style>
 </head>
 <body id="body" class="bg-[#0d0f10] text-gray-300 min-h-screen p-4 md:p-6 flex flex-col justify-center items-center relative">
 
+    {# Pass server-side data to JS #}
+    <script>
+        const totals = {
+            cal:     {{ today_log.cal_total }},
+            protein: {{ today_log.protein_total }},
+            carbs:   {{ today_log.carbs_total }},
+            fats:    {{ today_log.fats_total }},
+            fiber:   {{ today_log.fiber_total }},
+        };
+        const targets = {
+            cal:     {{ today_log.cal_target }},
+            protein: {{ today_log.protein_target }},
+            carbs:   {{ today_log.carbs_target }},
+            fats:    {{ today_log.fats_target }},
+            fiber:   {{ today_log.fiber_target }},
+        };
+        const csrfToken = "{{ csrf_token }}";
+        const logMealUrl = "{% url 'log_meal' %}";
+    </script>
+
     <div id="dashboardCard" class="w-full max-w-6xl bg-[#121416] border border-[#1f2226] rounded-xl p-6 shadow-2xl transition-colors duration-300">
-        
+
         <header id="header" class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-[#1f2226] pb-4 mb-6 gap-4">
             <div class="flex items-center gap-2">
                 <span id="logoText" class="text-white font-bold text-xl tracking-tight">🍽️ PlateCheck</span>
             </div>
-            
             <nav class="flex items-center gap-6 text-sm font-medium text-gray-400">
-                <a href="#" onclick="alert('Opening AI Chatbot Interface...')" class="flex items-center gap-1.5 hover:text-emerald-500 transition"><i data-lucide="message-square" class="w-4 h-4"></i> Chatbot</a>
-                <a href="#" class="flex items-center gap-1.5 text-[#22c55e] transition"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard</a>
+                <a href="{% url 'chatbot' %}" class="flex items-center gap-1.5 hover:text-emerald-500 transition"><i data-lucide="message-square" class="w-4 h-4"></i> Chatbot</a>
+                <a href="{% url 'dashboard' %}" class="flex items-center gap-1.5 text-[#22c55e] transition"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard</a>
                 <a href="#" onclick="openUploadModal()" class="flex items-center gap-1.5 hover:text-emerald-500 transition"><i data-lucide="upload-cloud" class="w-4 h-4"></i> Upload Meal</a>
+                <a href="{% url 'profile' %}" class="flex items-center gap-1.5 hover:text-emerald-500 transition"><i data-lucide="user" class="w-4 h-4"></i> Profile</a>
+                <form method="post" action="{% url 'logout' %}" style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" class="flex items-center gap-1.5 hover:text-rose-400 transition bg-transparent border-none cursor-pointer text-sm font-medium text-gray-400">
+                        <i data-lucide="log-out" class="w-4 h-4"></i> Log Out
+                    </button>
+                </form>
             </nav>
         </header>
 
@@ -34,18 +57,16 @@
             <div>
                 <h1 id="mainTitle" class="text-white text-2xl font-bold tracking-tight">My Dashboard</h1>
                 <div class="flex flex-wrap items-center gap-2 text-xs text-gray-500 mt-1">
-                    <span>Wednesday, 10 Jun 2026</span>
+                    <span>{{ today_log.date|date:"l, d M Y" }}</span>
                     <span class="w-1 h-1 bg-gray-600 rounded-full"></span>
-                    <span>Goal: weight loss</span>
+                    <span>Goal: {{ profile.get_goal_display }}</span>
                     <span class="w-1 h-1 bg-gray-600 rounded-full"></span>
-                    <span>Vegetarian</span>
+                    <span>{{ profile.get_diet_type_display }}</span>
                 </div>
             </div>
-            <button onclick="alert('Generating comprehensive metabolic and macro trends reports...')" class="flex items-center gap-1.5 text-xs font-semibold text-[#22c55e] border border-[#22c55e]/30 bg-[#22c55e]/5 px-3 py-2 rounded-lg hover:bg-[#22c55e]/10 transition">
-                <i data-lucide="trending-up" class="w-4 h-4"></i> Full analysis <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i>
-            </button>
         </div>
 
+        {# Macro summary cards #}
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
             <div class="card-item bg-[#1a1d20] border border-[#24282e] rounded-xl p-4 flex flex-col justify-between transition-colors">
                 <div>
@@ -53,31 +74,31 @@
                         <span class="p-1.5 bg-emerald-500/10 text-emerald-500 rounded-lg"><i data-lucide="flame" class="w-4 h-4"></i></span>
                         Calories
                     </div>
-                    <div class="text-2xl font-bold text-card-main text-white tracking-tight" id="cal-count">1,240</div>
-                    <div class="text-[10px] text-gray-500 mt-0.5">of 1,600 target</div>
+                    <div class="text-2xl font-bold text-white tracking-tight" id="cal-count">{{ today_log.cal_total }}</div>
+                    <div class="text-[10px] text-gray-500 mt-0.5">of {{ today_log.cal_target }} target</div>
                 </div>
                 <div class="mt-4">
-                    <div class="w-full bg-[#262a30] progress-bg h-1.5 rounded-full overflow-hidden">
-                        <div id="cal-progress" class="bg-emerald-500 h-1.5 rounded-full" style="width: 78%"></div>
+                    <div class="w-full bg-[#262a30] h-1.5 rounded-full overflow-hidden">
+                        <div id="cal-progress" class="bg-emerald-500 h-1.5 rounded-full" style="width: {% widthratio today_log.cal_total today_log.cal_target 100 %}%"></div>
                     </div>
-                    <div id="cal-pct" class="text-[10px] font-semibold text-emerald-500 mt-1 text-center">78%</div>
+                    <div id="cal-pct" class="text-[10px] font-semibold text-emerald-500 mt-1 text-center">{% widthratio today_log.cal_total today_log.cal_target 100 %}%</div>
                 </div>
             </div>
 
             <div class="card-item bg-[#1a1d20] border border-[#24282e] rounded-xl p-4 flex flex-col justify-between transition-colors">
                 <div>
                     <div class="flex items-center gap-2 text-xs font-medium text-gray-400 mb-2">
-                        <span class="p-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg"><i data-lucide="armchair" class="w-4 h-4"></i></span>
+                        <span class="p-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg"><i data-lucide="dumbbell" class="w-4 h-4"></i></span>
                         Protein
                     </div>
-                    <div class="text-2xl font-bold text-card-main text-white tracking-tight" id="protein-count">54g</div>
-                    <div class="text-[10px] text-gray-500 mt-0.5">of 80g target</div>
+                    <div class="text-2xl font-bold text-white tracking-tight" id="protein-count">{{ today_log.protein_total }}g</div>
+                    <div class="text-[10px] text-gray-500 mt-0.5">of {{ today_log.protein_target }}g target</div>
                 </div>
                 <div class="mt-4">
-                    <div class="w-full bg-[#262a30] progress-bg h-1.5 rounded-full overflow-hidden">
-                        <div id="protein-progress" class="bg-indigo-500 h-1.5 rounded-full" style="width: 68%"></div>
+                    <div class="w-full bg-[#262a30] h-1.5 rounded-full overflow-hidden">
+                        <div id="protein-progress" class="bg-indigo-500 h-1.5 rounded-full" style="width: {% widthratio today_log.protein_total today_log.protein_target 100 %}%"></div>
                     </div>
-                    <div id="protein-pct" class="text-[10px] font-semibold text-indigo-400 mt-1 text-center">68%</div>
+                    <div id="protein-pct" class="text-[10px] font-semibold text-indigo-400 mt-1 text-center">{% widthratio today_log.protein_total today_log.protein_target 100 %}%</div>
                 </div>
             </div>
 
@@ -87,14 +108,14 @@
                         <span class="p-1.5 bg-amber-500/10 text-amber-500 rounded-lg"><i data-lucide="wheat" class="w-4 h-4"></i></span>
                         Carbs
                     </div>
-                    <div class="text-2xl font-bold text-card-main text-white tracking-tight" id="carbs-count">168g</div>
-                    <div class="text-[10px] text-gray-500 mt-0.5">of 160g target</div>
+                    <div class="text-2xl font-bold text-white tracking-tight" id="carbs-count">{{ today_log.carbs_total }}g</div>
+                    <div class="text-[10px] text-gray-500 mt-0.5">of {{ today_log.carbs_target }}g target</div>
                 </div>
                 <div class="mt-4">
-                    <div class="w-full bg-[#262a30] progress-bg h-1.5 rounded-full overflow-hidden">
-                        <div id="carbs-progress" class="bg-amber-500 h-1.5 rounded-full" style="width: 100%"></div>
+                    <div class="w-full bg-[#262a30] h-1.5 rounded-full overflow-hidden">
+                        <div id="carbs-progress" class="bg-amber-500 h-1.5 rounded-full" style="width: {% widthratio today_log.carbs_total today_log.carbs_target 100 %}%"></div>
                     </div>
-                    <div id="carbs-pct" class="text-[10px] font-semibold text-amber-500 mt-1 text-center">105%</div>
+                    <div id="carbs-pct" class="text-[10px] font-semibold text-amber-500 mt-1 text-center">{% widthratio today_log.carbs_total today_log.carbs_target 100 %}%</div>
                 </div>
             </div>
 
@@ -104,14 +125,14 @@
                         <span class="p-1.5 bg-blue-500/10 text-blue-400 rounded-lg"><i data-lucide="droplet" class="w-4 h-4"></i></span>
                         Fats
                     </div>
-                    <div class="text-2xl font-bold text-card-main text-white tracking-tight" id="fats-count">38g</div>
-                    <div class="text-[10px] text-gray-500 mt-0.5">of 53g target</div>
+                    <div class="text-2xl font-bold text-white tracking-tight" id="fats-count">{{ today_log.fats_total }}g</div>
+                    <div class="text-[10px] text-gray-500 mt-0.5">of {{ today_log.fats_target }}g target</div>
                 </div>
                 <div class="mt-4">
-                    <div class="w-full bg-[#262a30] progress-bg h-1.5 rounded-full overflow-hidden">
-                        <div id="fats-progress" class="bg-blue-500 h-1.5 rounded-full" style="width: 72%"></div>
+                    <div class="w-full bg-[#262a30] h-1.5 rounded-full overflow-hidden">
+                        <div id="fats-progress" class="bg-blue-500 h-1.5 rounded-full" style="width: {% widthratio today_log.fats_total today_log.fats_target 100 %}%"></div>
                     </div>
-                    <div id="fats-pct" class="text-[10px] font-semibold text-blue-400 mt-1 text-center">72%</div>
+                    <div id="fats-pct" class="text-[10px] font-semibold text-blue-400 mt-1 text-center">{% widthratio today_log.fats_total today_log.fats_target 100 %}%</div>
                 </div>
             </div>
 
@@ -121,262 +142,71 @@
                         <span class="p-1.5 bg-rose-500/10 text-rose-400 rounded-lg"><i data-lucide="heart" class="w-4 h-4"></i></span>
                         Fiber
                     </div>
-                    <div class="text-2xl font-bold text-card-main text-white tracking-tight">18g</div>
-                    <div class="text-[10px] text-gray-500 mt-0.5">of 25g target</div>
+                    <div class="text-2xl font-bold text-white tracking-tight">{{ today_log.fiber_total }}g</div>
+                    <div class="text-[10px] text-gray-500 mt-0.5">of {{ today_log.fiber_target }}g target</div>
                 </div>
                 <div class="mt-4">
-                    <div class="w-full bg-[#262a30] progress-bg h-1.5 rounded-full overflow-hidden">
-                        <div class="bg-rose-500 h-1.5 rounded-full" style="width: 72%"></div>
+                    <div class="w-full bg-[#262a30] h-1.5 rounded-full overflow-hidden">
+                        <div class="bg-rose-500 h-1.5 rounded-full" style="width: {% widthratio today_log.fiber_total today_log.fiber_target 100 %}%"></div>
                     </div>
-                    <div class="text-[10px] font-semibold text-rose-400 mt-1 text-center">72%</div>
+                    <div class="text-[10px] font-semibold text-rose-400 mt-1 text-center">{% widthratio today_log.fiber_total today_log.fiber_target 100 %}%</div>
                 </div>
             </div>
         </div>
 
+        {# Meals journal #}
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
-            <div class="card-item bg-[#1a1d20] border border-[#24282e] rounded-xl p-5 flex flex-col justify-between transition-colors">
-                <div>
-                    <div class="flex items-center gap-2 text-sm font-semibold text-white text-card-main mb-6">
-                        <i data-lucide="pie-chart" class="w-5 h-5 text-emerald-500"></i>
-                        Macronutrients
-                    </div>
-                    
-                    <div class="space-y-5">
-                        <div>
-                            <div class="flex justify-between text-xs font-medium mb-1.5">
-                                <span class="text-macro-label text-gray-300">Protein</span>
-                                <div class="space-x-3">
-                                    <span id="protein-row-txt" class="text-gray-400 font-normal">54g / 80g</span>
-                                    <span id="protein-row-pct" class="text-indigo-400 font-semibold w-8 inline-block text-right">68%</span>
-                                </div>
-                            </div>
-                            <div class="w-full bg-[#262a30] progress-bg h-2 rounded-full overflow-hidden">
-                                <div id="protein-bar-macro" class="bg-indigo-500 h-2 rounded-full" style="width: 68%"></div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <div class="flex justify-between text-xs font-medium mb-1.5">
-                                <span class="text-macro-label text-gray-300">Carbs</span>
-                                <div class="space-x-3">
-                                    <span id="carbs-row-txt" class="text-gray-400 font-normal">168g / 160g</span>
-                                    <span id="carbs-row-pct" class="text-amber-500 font-semibold w-8 inline-block text-right">105%</span>
-                                </div>
-                            </div>
-                            <div class="w-full bg-[#262a30] progress-bg h-2 rounded-full overflow-hidden">
-                                <div id="carbs-bar-macro" class="bg-amber-500 h-2 rounded-full" style="width: 100%"></div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <div class="flex justify-between text-xs font-medium mb-1.5">
-                                <span class="text-macro-label text-gray-300">Fats</span>
-                                <div class="space-x-3">
-                                    <span id="fats-row-txt" class="text-gray-400 font-normal">38g / 53g</span>
-                                    <span id="fats-row-pct" class="text-blue-400 font-semibold w-8 inline-block text-right">72%</span>
-                                </div>
-                            </div>
-                            <div class="w-full bg-[#262a30] progress-bg h-2 rounded-full overflow-hidden">
-                                <div id="fats-bar-macro" class="bg-blue-500 h-2 rounded-full" style="width: 72%"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div id="macroFooter" class="text-[10px] text-gray-500 mt-6 pt-2 border-t border-[#262a30]">
-                    Percentages are based on your daily goals
-                </div>
-            </div>
-
             <div class="card-item bg-[#1a1d20] border border-[#24282e] rounded-xl p-5 transition-colors">
-                <div class="flex items-center gap-2 text-sm font-semibold text-white text-card-main mb-6">
-                    <i data-lucide="leaf" class="w-5 h-5 text-emerald-500"></i>
-                    Micronutrients
+                <div class="flex items-center gap-2 text-sm font-semibold text-white mb-4">
+                    <i data-lucide="utensils" class="w-5 h-5 text-emerald-500"></i>
+                    Today's Meals
                 </div>
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
-                    <div>
-                        <div class="flex justify-between text-xs font-medium mb-1">
-                            <span class="text-gray-400">Iron</span>
-                            <span class="text-gray-300 micro-val font-semibold">82%</span>
-                        </div>
-                        <div class="w-full bg-[#262a30] progress-bg h-1.5 rounded-full overflow-hidden">
-                            <div class="bg-emerald-500 h-1.5 rounded-full" style="width: 82%"></div>
-                        </div>
-                    </div>
-                    <div>
-                        <div class="flex justify-between text-xs font-medium mb-1">
-                            <span class="text-gray-400">Vitamin C</span>
-                            <span class="text-gray-300 micro-val font-semibold">68%</span>
-                        </div>
-                        <div class="w-full bg-[#262a30] progress-bg h-1.5 rounded-full overflow-hidden">
-                            <div class="bg-emerald-500 h-1.5 rounded-full" style="width: 68%"></div>
-                        </div>
-                    </div>
-                    <div>
-                        <div class="flex justify-between text-xs font-medium mb-1">
-                            <span class="text-gray-400">Calcium</span>
-                            <span class="text-gray-300 micro-val font-semibold">74%</span>
-                        </div>
-                        <div class="w-full bg-[#262a30] progress-bg h-1.5 rounded-full overflow-hidden">
-                            <div class="bg-emerald-500 h-1.5 rounded-full" style="width: 74%"></div>
-                        </div>
-                    </div>
-                    <div>
-                        <div class="flex justify-between text-xs font-medium mb-1">
-                            <span class="text-gray-400">Vitamin D</span>
-                            <span class="text-gray-300 micro-val font-semibold">53%</span>
-                        </div>
-                        <div class="w-full bg-[#262a30] progress-bg h-1.5 rounded-full overflow-hidden">
-                            <div class="bg-emerald-500 h-1.5 rounded-full" style="width: 53%"></div>
-                        </div>
-                    </div>
-                    <div>
-                        <div class="flex justify-between text-xs font-medium mb-1">
-                            <span class="text-gray-400">Vitamin A</span>
-                            <span class="text-gray-300 micro-val font-semibold">91%</span>
-                        </div>
-                        <div class="w-full bg-[#262a30] progress-bg h-1.5 rounded-full overflow-hidden">
-                            <div class="bg-emerald-500 h-1.5 rounded-full" style="width: 91%"></div>
-                        </div>
-                    </div>
-                    <div>
-                        <div class="flex justify-between text-xs font-medium mb-1">
-                            <span class="text-gray-400">Potassium</span>
-                            <span class="text-gray-300 micro-val font-semibold">77%</span>
-                        </div>
-                        <div class="w-full bg-[#262a30] progress-bg h-1.5 rounded-full overflow-hidden">
-                            <div class="bg-emerald-500 h-1.5 rounded-full" style="width: 77%"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card-item bg-[#1a1d20] border border-[#24282e] rounded-xl p-5 transition-colors">
-                <div class="flex items-center gap-2 text-sm font-semibold text-white text-card-main mb-4">
-                    <i data-lucide="utensils-cross-referenced" class="w-5 h-5 text-emerald-500"></i>
-                    Meals
-                </div>
-                
                 <div id="meals-list" class="divide-y divide-[#24282e]">
-                    <div class="flex items-center justify-between py-3">
-                        <div class="flex items-center gap-3">
-                            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                            <i data-lucide="sun" class="w-4 h-4 text-amber-500/80"></i>
-                            <span class="text-xs font-medium text-white text-card-main">Breakfast</span>
+                    {% for meal in meals %}
+                        <div class="flex items-center justify-between py-3">
+                            <div class="flex items-center gap-3">
+                                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                <i data-lucide="utensils" class="w-4 h-4 text-emerald-500"></i>
+                                <span class="text-xs font-medium text-white">{{ meal.name }}</span>
+                            </div>
+                            <div class="flex gap-12 text-xs">
+                                <span class="text-gray-500">{{ meal.logged_at|date:"H:i" }}</span>
+                                <span class="text-gray-300 font-medium w-16 text-right">{{ meal.calories }} cal</span>
+                            </div>
                         </div>
-                        <div class="flex gap-12 text-xs">
-                            <span class="text-gray-500">8:30 AM</span>
-                            <span class="text-gray-300 meal-cal font-medium w-16 text-right">320 cal</span>
-                        </div>
-                    </div>
-                    <div class="flex items-center justify-between py-3">
-                        <div class="flex items-center gap-3">
-                            <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-                            <i data-lucide="sun-dim" class="w-4 h-4 text-amber-500"></i>
-                            <span class="text-xs font-medium text-white text-card-main">Lunch</span>
-                        </div>
-                        <div class="flex gap-12 text-xs">
-                            <span class="text-gray-500">1:15 PM</span>
-                            <span class="text-gray-300 meal-cal font-medium w-16 text-right">520 cal</span>
-                        </div>
-                    </div>
-                    <div class="flex items-center justify-between py-3">
-                        <div class="flex items-center gap-3">
-                            <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-                            <i data-lucide="cup-tot" class="w-4 h-4 text-amber-600/80"></i>
-                            <span class="text-xs font-medium text-white text-card-main">Snack</span>
-                        </div>
-                        <div class="flex gap-12 text-xs">
-                            <span class="text-gray-500">4:30 PM</span>
-                            <span class="text-gray-300 meal-cal font-medium w-16 text-right">150 cal</span>
-                        </div>
-                    </div>
-                    <div class="flex items-center justify-between py-3">
-                        <div class="flex items-center gap-3">
-                            <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
-                            <i data-lucide="moon-star" class="w-4 h-4 text-indigo-300/80"></i>
-                            <span class="text-xs font-medium text-white text-card-main">Dinner</span>
-                        </div>
-                        <div class="flex gap-12 text-xs">
-                            <span class="text-gray-500">8:00 PM</span>
-                            <span class="text-gray-300 meal-cal font-medium w-16 text-right">250 cal</span>
-                        </div>
-                    </div>
+                    {% empty %}
+                        <div class="text-xs text-gray-500 py-4 text-center">No meals logged today yet.</div>
+                    {% endfor %}
                 </div>
-
                 <div class="flex justify-between items-center mt-4 pt-3 border-t border-[#262a30] text-xs font-semibold">
                     <span class="text-gray-400">Total</span>
-                    <span id="total-cal-summary" class="text-emerald-500 font-bold">1,240 cal</span>
+                    <span id="total-cal-summary" class="text-emerald-500 font-bold">{{ today_log.cal_total }} cal</span>
                 </div>
             </div>
 
             <div class="flex flex-col justify-between gap-4">
                 <div class="card-item bg-[#1a1d20] border border-[#24282e] rounded-xl p-5 flex-1 transition-colors">
-                    <div class="flex items-center gap-2 text-sm font-semibold text-white text-card-main mb-4">
+                    <div class="flex items-center gap-2 text-sm font-semibold text-white mb-4">
                         <i data-lucide="crown" class="w-5 h-5 text-emerald-500"></i>
-                        Weekly Streak
+                        Streak
                     </div>
-
-                    <div class="flex items-start justify-between">
-                        <div>
-                            <div class="text-4xl font-extrabold text-emerald-500 tracking-tight">6</div>
-                            <div class="text-[11px] text-gray-400 font-medium mt-1">days in a row</div>
-                            <p class="text-[10px] text-gray-500 mt-3">Keep it up! You're doing great.</p>
-                        </div>
-                        
-                        <div class="flex flex-col items-end">
-                            <div class="flex gap-1.5">
-                                <div class="flex flex-col items-center gap-1.5">
-                                    <span class="text-[10px] text-gray-500 font-semibold">M</span>
-                                    <div class="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400"><i data-lucide="check" class="w-3 h-3"></i></div>
-                                </div>
-                                <div class="flex flex-col items-center gap-1.5">
-                                    <span class="text-[10px] text-gray-500 font-semibold">T</span>
-                                    <div class="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400"><i data-lucide="check" class="w-3 h-3"></i></div>
-                                </div>
-                                <div class="flex flex-col items-center gap-1.5">
-                                    <span class="text-[10px] text-gray-500 font-semibold">W</span>
-                                    <div class="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400"><i data-lucide="check" class="w-3 h-3"></i></div>
-                                </div>
-                                <div class="flex flex-col items-center gap-1.5">
-                                    <span class="text-[10px] text-gray-500 font-semibold">T</span>
-                                    <div class="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400"><i data-lucide="check" class="w-3 h-3"></i></div>
-                                </div>
-                                <div class="flex flex-col items-center gap-1.5">
-                                    <span class="text-[10px] text-gray-500 font-semibold">F</span>
-                                    <div class="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400"><i data-lucide="check" class="w-3 h-3"></i></div>
-                                </div>
-                                <div class="flex flex-col items-center gap-1.5">
-                                    <span class="text-[10px] text-emerald-500 font-semibold">S</span>
-                                    <div class="w-5 h-5 rounded-full border-2 border-emerald-500 bg-transparent flex items-center justify-center"></div>
-                                </div>
-                                <div class="flex flex-col items-center gap-1.5">
-                                    <span class="text-[10px] text-gray-500 font-semibold">S</span>
-                                    <div class="w-5 h-5 rounded-full border border-gray-700 bg-transparent flex items-center justify-center"><i data-lucide="refresh-cw" class="w-2 h-2 text-gray-600"></i></div>
-                                </div>
-                            </div>
-                            <div class="flex gap-3 text-[9px] text-gray-400 mt-4">
-                                <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Completed</span>
-                                <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full border border-emerald-500"></span> Today</span>
-                                <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-gray-600"></span> Missed</span>
-                            </div>
-                        </div>
-                    </div>
+                    <div class="text-4xl font-extrabold text-emerald-500 tracking-tight">{{ profile.streak_days }}</div>
+                    <div class="text-[11px] text-gray-400 font-medium mt-1">days in a row</div>
                 </div>
 
                 <div class="flex flex-col sm:flex-row gap-3">
                     <button onclick="openUploadModal()" class="flex-1 flex items-center justify-center gap-2 border border-[#24282e] bg-transparent hover:bg-[#1f2226] font-medium text-xs text-gray-300 py-3 rounded-xl transition">
-                        <i data-lucide="upload" class="w-4 h-4"></i> Upload Meal
+                        <i data-lucide="upload" class="w-4 h-4"></i> Log Meal
                     </button>
-                    <button onclick="askAICoach()" class="flex-1 flex items-center justify-center gap-2 bg-[#22c55e] hover:bg-[#1ebd54] font-semibold text-xs text-black py-3 rounded-xl transition shadow-md">
+                    <a href="{% url 'chatbot' %}" class="flex-1 flex items-center justify-center gap-2 bg-[#22c55e] hover:bg-[#1ebd54] font-semibold text-xs text-black py-3 rounded-xl transition shadow-md">
                         <i data-lucide="message-square-code" class="w-4 h-4"></i> Ask AI Coach
-                    </button>
+                    </a>
                 </div>
             </div>
         </div>
     </div>
 
+    {# Meal log modal — posts to Django #}
     <div id="uploadModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
         <div class="bg-[#121416] border border-[#24282e] p-6 rounded-xl w-full max-w-sm text-gray-300">
             <h3 class="text-white text-lg font-bold mb-4 flex items-center gap-2"><i data-lucide="plus-circle" class="text-emerald-500"></i>Log New Meal</h3>
@@ -405,6 +235,10 @@
                         <input id="in-fat" type="number" placeholder="8" class="w-full bg-[#1a1d20] border border-[#262930] rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500">
                     </div>
                 </div>
+                <div>
+                    <label class="block text-xs font-semibold mb-1 text-gray-400">Fiber (g)</label>
+                    <input id="in-fiber" type="number" placeholder="4" class="w-full bg-[#1a1d20] border border-[#262930] rounded-lg p-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+                </div>
             </div>
             <div class="flex gap-2 mt-5">
                 <button onclick="closeUploadModal()" class="flex-1 bg-gray-800 text-gray-300 font-medium py-2 rounded-lg text-xs hover:bg-gray-700 transition">Cancel</button>
@@ -413,204 +247,92 @@
         </div>
     </div>
 
-    <div id="aiModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
-        <div class="bg-[#121416] border border-[#24282e] p-6 rounded-xl w-full max-w-md text-gray-300">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-white text-lg font-bold flex items-center gap-2"><i data-lucide="bot" class="text-emerald-500"></i>PlateCheck AI Coach</h3>
-                <button onclick="closeAIModal()" class="text-gray-500 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
-            </div>
-            <div class="bg-[#1a1d20] border border-[#24282e] p-4 rounded-lg text-xs leading-relaxed mb-4 h-48 overflow-y-auto space-y-3" id="ai-chat-body">
-                <p class="text-gray-400"><em>Analyzing your nutrient metadata dynamically...</em></p>
-            </div>
-            <button onclick="closeAIModal()" class="w-full bg-[#22c55e] text-black font-bold py-2 rounded-lg text-xs hover:bg-[#1ebd54] transition">Got it, Coach!</button>
-        </div>
-    </div>
-
     <script>
-        // State variables
         let isDarkMode = true;
-        let totals = { cal: 1240, protein: 54, carbs: 168, fats: 38 };
-        const targets = { cal: 1600, protein: 80, carbs: 160, fats: 53 };
 
-        // 1. Theme Toggler Mechanism
-            
-            const body = document.getElementById('body');
-            const dashboardCard = document.getElementById('dashboardCard');
-            const header = document.getElementById('header');
-            const logoText = document.getElementById('logoText');
-            const mainTitle = document.getElementById('mainTitle');
-            const themeText = document.getElementById('themeText');
-            const themeIcon = document.getElementById('themeIcon');
-            const toggleTrack = document.getElementById('toggleTrack');
-            const cards = document.querySelectorAll('.card-item');
-            const textCardMain = document.querySelectorAll('.text-card-main');
-            const textMacroLabel = document.querySelectorAll('.text-macro-label');
-            const progressBgs = document.querySelectorAll('.progress-bg');
-            const microVals = document.querySelectorAll('.micro-val');
-            
-            if (!isDarkMode) {
-                // Apply Light mode styles
-                body.className = "bg-[#f3f4f6] text-gray-700 min-h-screen p-4 md:p-6 flex flex-col justify-center items-center relative";
-                dashboardCard.className = "w-full max-w-6xl bg-white border border-gray-200 rounded-xl p-6 shadow-xl transition-colors duration-300";
-                header.className = "flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-gray-200 pb-4 mb-6 gap-4";
-                logoText.className = "text-gray-900 font-bold text-xl tracking-tight";
-                mainTitle.className = "text-gray-900 text-2xl font-bold tracking-tight";
-                themeText.innerText = "Light Mode";
-                themeText.className = "text-gray-600";
-                toggleTrack.className = "w-8 h-4 bg-gray-300 rounded-full p-0.5 flex justify-start items-center ml-1 transition-all duration-300";
-                
-                cards.forEach(c => c.className = "card-item bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-col justify-between transition-colors");
-                textCardMain.forEach(t => t.classList.replace('text-white', 'text-gray-900'));
-                textMacroLabel.forEach(t => t.classList.replace('text-gray-300', 'text-gray-700'));
-                progressBgs.forEach(b => b.classList.replace('bg-[#262a30]', 'bg-gray-200'));
-                microVals.forEach(m => m.classList.replace('text-gray-300', 'text-gray-800'));
-                
-                document.getElementById('macroFooter').className = "text-[10px] text-gray-400 mt-6 pt-2 border-t border-gray-200";
-                themeIcon.setAttribute('data-lucide', 'sun');
-            } else {
-                // Revert to Dark Mode styles
-                body.className = "bg-[#0d0f10] text-gray-300 min-h-screen p-4 md:p-6 flex flex-col justify-center items-center relative";
-                dashboardCard.className = "w-full max-w-6xl bg-[#121416] border border-[#1f2226] rounded-xl p-6 shadow-2xl transition-colors duration-300";
-                header.className = "flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-[#1f2226] pb-4 mb-6 gap-4";
-                logoText.className = "text-white font-bold text-xl tracking-tight";
-                mainTitle.className = "text-white text-2xl font-bold tracking-tight";
-                themeText.innerText = "Dark Mode";
-                themeText.className = "text-gray-400";
-                toggleTrack.className = "w-8 h-4 bg-[#22c55e] rounded-full p-0.5 flex justify-end items-center ml-1 transition-all duration-300";
-                
-                cards.forEach(c => c.className = "card-item bg-[#1a1d20] border border-[#24282e] rounded-xl p-4 flex flex-col justify-between transition-colors");
-                textCardMain.forEach(t => t.classList.add('text-white'));
-                textMacroLabel.forEach(t => t.classList.add('text-gray-300'));
-                progressBgs.forEach(b => b.className = "w-full bg-[#262a30] progress-bg h-1.5 rounded-full overflow-hidden");
-                microVals.forEach(m => m.className = "text-gray-300 micro-val font-semibold");
-                
-                document.getElementById('macroFooter').className = "text-[10px] text-gray-500 mt-6 pt-2 border-t border-[#262a30]";
-                themeIcon.setAttribute('data-lucide', 'moon');
-            }
-            lucide.createIcons();
-        }
-
-        // 2. Meal Upload Functionality
-        function openUploadModal() {
-            document.getElementById('uploadModal').style.display = 'flex';
-        }
-        function closeUploadModal() {
-            document.getElementById('uploadModal').style.display = 'none';
-        }
+        function openUploadModal() { document.getElementById('uploadModal').style.display = 'flex'; }
+        function closeUploadModal() { document.getElementById('uploadModal').style.display = 'none'; }
 
         function submitMeal() {
-            const name = document.getElementById('in-name').value || "Unnamed Meal";
-            const cal = parseInt(document.getElementById('in-cal').value) || 0;
-            const pro = parseInt(document.getElementById('in-pro').value) || 0;
-            const carb = parseInt(document.getElementById('in-carb').value) || 0;
-            const fat = parseInt(document.getElementById('in-fat').value) || 0;
+            const name  = document.getElementById('in-name').value || "Unnamed Meal";
+            const cal   = parseInt(document.getElementById('in-cal').value)   || 0;
+            const pro   = parseInt(document.getElementById('in-pro').value)   || 0;
+            const carb  = parseInt(document.getElementById('in-carb').value)  || 0;
+            const fat   = parseInt(document.getElementById('in-fat').value)   || 0;
+            const fiber = parseInt(document.getElementById('in-fiber').value) || 0;
 
-            // Update State Metrics
-            totals.cal += cal;
-            totals.protein += pro;
-            totals.carbs += carb;
-            totals.fats += fat;
+            // POST to Django to persist the meal
+            fetch(logMealUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': csrfToken,
+                },
+                body: new URLSearchParams({
+                    meal_name: name,
+                    calories:  cal,
+                    protein:   pro,
+                    carbs:     carb,
+                    fats:      fat,
+                    fiber:     fiber,
+                })
+            }).then(response => {
+                if (response.ok) {
+                    // Update JS totals and DOM optimistically
+                    totals.cal     += cal;
+                    totals.protein += pro;
+                    totals.carbs   += carb;
+                    totals.fats    += fat;
+                    updateDashboardDOM();
 
-            // Update Dashboard Graphics 
-            updateDashboardDOM();
+                    // Append meal row to journal
+                    const mealsList = document.getElementById('meals-list');
+                    const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const row = document.createElement('div');
+                    row.className = "flex items-center justify-between py-3";
+                    row.innerHTML = `
+                        <div class="flex items-center gap-3">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <span class="text-xs font-medium text-white">${name}</span>
+                        </div>
+                        <div class="flex gap-12 text-xs">
+                            <span class="text-gray-500">${currentTime}</span>
+                            <span class="text-gray-300 font-medium w-16 text-right">${cal} cal</span>
+                        </div>`;
+                    mealsList.appendChild(row);
 
-            // Append dynamic row to journal UI
-            const mealsList = document.getElementById('meals-list');
-            const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            
-            const row = document.createElement('div');
-            row.className = "flex items-center justify-between py-3";
-            row.innerHTML = `
-                <div class="flex items-center gap-3">
-                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                    <i data-lucide="utensils" class="w-4 h-4 text-emerald-500"></i>
-                    <span class="text-xs font-medium ${!isDarkMode ? 'text-gray-900' : 'text-white'} text-card-main">${name}</span>
-                </div>
-                <div class="flex gap-12 text-xs">
-                    <span class="text-gray-500">${currentTime}</span>
-                    <span class="text-gray-300 meal-cal font-medium w-16 text-right">${cal} cal</span>
-                </div>
-            `;
-            mealsList.appendChild(row);
-
-            // Reset Form fields & Close
-            document.getElementById('in-name').value = '';
-            document.getElementById('in-cal').value = '';
-            document.getElementById('in-pro').value = '';
-            document.getElementById('in-carb').value = '';
-            document.getElementById('in-fat').value = '';
-            
-            closeUploadModal();
-            lucide.createIcons();
+                    // Clear inputs and close
+                    ['in-name','in-cal','in-pro','in-carb','in-fat','in-fiber'].forEach(id => document.getElementById(id).value = '');
+                    closeUploadModal();
+                    lucide.createIcons();
+                }
+            });
         }
 
         function updateDashboardDOM() {
-            // Percent calculations
-            const cPct = Math.round((totals.cal / targets.cal) * 100);
-            const pPct = Math.round((totals.protein / targets.protein) * 100);
-            const carbPct = Math.round((totals.carbs / targets.carbs) * 100);
-            const fPct = Math.round((totals.fats / targets.fats) * 100);
+            const cPct    = Math.round((totals.cal     / targets.cal)     * 100);
+            const pPct    = Math.round((totals.protein / targets.protein) * 100);
+            const carbPct = Math.round((totals.carbs   / targets.carbs)   * 100);
+            const fPct    = Math.round((totals.fats    / targets.fats)    * 100);
 
-            // Upper Grid text updates
-            document.getElementById('cal-count').innerText = totals.cal.toLocaleString();
+            document.getElementById('cal-count').innerText     = totals.cal.toLocaleString();
             document.getElementById('protein-count').innerText = totals.protein + 'g';
-            document.getElementById('carbs-count').innerText = totals.carbs + 'g';
-            document.getElementById('fats-count').innerText = totals.fats + 'g';
+            document.getElementById('carbs-count').innerText   = totals.carbs + 'g';
+            document.getElementById('fats-count').innerText    = totals.fats + 'g';
 
-            // Progress bar animations
-            document.getElementById('cal-progress').style.width = `${Math.min(cPct, 100)}%`;
-            document.getElementById('protein-progress').style.width = `${Math.min(pPct, 100)}%`;
-            document.getElementById('carbs-progress').style.width = `${Math.min(carbPct, 100)}%`;
-            document.getElementById('fats-progress').style.width = `${Math.min(fPct, 100)}%`;
+            document.getElementById('cal-progress').style.width     = `${Math.min(cPct,    100)}%`;
+            document.getElementById('protein-progress').style.width = `${Math.min(pPct,    100)}%`;
+            document.getElementById('carbs-progress').style.width   = `${Math.min(carbPct, 100)}%`;
+            document.getElementById('fats-progress').style.width    = `${Math.min(fPct,    100)}%`;
 
-            document.getElementById('cal-pct').innerText = cPct + '%';
+            document.getElementById('cal-pct').innerText     = cPct + '%';
             document.getElementById('protein-pct').innerText = pPct + '%';
-            document.getElementById('carbs-pct').innerText = carbPct + '%';
-            document.getElementById('fats-pct').innerText = fPct + '%';
-
-            // Middle Detailed Grid updates
-            document.getElementById('protein-row-txt').innerText = `${totals.protein}g / ${targets.protein}g`;
-            document.getElementById('protein-row-pct').innerText = pPct + '%';
-            document.getElementById('protein-bar-macro').style.width = `${Math.min(pPct, 100)}%`;
-
-            document.getElementById('carbs-row-txt').innerText = `${totals.carbs}g / ${targets.carbs}g`;
-            document.getElementById('carbs-row-pct').innerText = carbPct + '%';
-            document.getElementById('carbs-bar-macro').style.width = `${Math.min(carbPct, 100)}%`;
-
-            document.getElementById('fats-row-txt').innerText = `${totals.fats}g / ${targets.fats}g`;
-            document.getElementById('fats-row-pct').innerText = fPct + '%';
-            document.getElementById('fats-bar-macro').style.width = `${Math.min(fPct, 100)}%`;
+            document.getElementById('carbs-pct').innerText   = carbPct + '%';
+            document.getElementById('fats-pct').innerText    = fPct + '%';
 
             document.getElementById('total-cal-summary').innerText = `${totals.cal.toLocaleString()} cal`;
         }
 
-        // 3. AI Coach Analysis Engine
-        function askAICoach() {
-            document.getElementById('aiModal').style.display = 'flex';
-            const chatBody = document.getElementById('ai-chat-body');
-            
-            // Build dynamic text advice depending on current calorie status
-            let analysisHtml = `<p class="text-emerald-400 font-semibold">Hello! Here is your quick profile breakdown for today:</p>`;
-            analysisHtml += `<p class="text-gray-300">You have logged <strong>${totals.cal} kcal</strong> out of your ${targets.cal} target.</p>`;
-
-            if(totals.carbs > targets.carbs) {
-                analysisHtml += `<p class="text-amber-500 font-medium">⚠️ Notice: Your carbohydrates (${totals.carbs}g) have already exceeded your optimal fat-loss cap limit of ${targets.carbs}g today. Focus heavily on lean greens and proteins for the remainder of the evening!</p>`;
-            } else {
-                analysisHtml += `<p class="text-gray-400">👍 Great management on clean carbs. You still have room to balance out safely.</p>`;
-            }
-
-            if(totals.protein < (targets.protein * 0.8)) {
-                analysisHtml += `<p class="text-indigo-400">💪 Coach Recommendation: Protein is running slightly low at ${totals.protein}g. Try pairing your next meal with lentils, tempeh, or Greek yogurt to reach your 80g target!</p>`;
-            }
-
-            chatBody.innerHTML = analysisHtml;
-        }
-
-        function closeAIModal() {
-            document.getElementById('aiModal').style.display = 'none';
-        }
-
-        // Initializer
         lucide.createIcons();
     </script>
 </body>

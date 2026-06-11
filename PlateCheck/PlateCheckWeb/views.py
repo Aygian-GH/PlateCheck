@@ -1,8 +1,11 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib import messages
+from django.utils import timezone
+
+from .models import UserProfile, DailyLog, MealEntry, FoodImage, ChatMessage
 
 
 # ---------------------------------------------------------------------------
@@ -16,6 +19,129 @@ class UsernameOnlySignupForm(UserCreationForm):
     """
     class Meta(UserCreationForm.Meta):
         fields = ('username',)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def calculate_targets(profile):
+    """
+    Calculates personalised daily macro targets from the user's profile.
+
+    Calorie calculation:
+      1. BMR via Mifflin-St Jeor equation (most accurate for general use)
+         Male:   BMR = 10*weight + 6.25*height - 5*age + 5
+         Female: BMR = 10*weight + 6.25*height - 5*age - 161
+         Other:  average of both
+      2. TDEE = BMR * activity multiplier
+      3. Calorie target adjusted for goal (deficit/surplus)
+
+    Macro split by goal:
+      Lose Weight:     higher protein, lower carbs, moderate fat
+      Gain Weight:     higher carbs and protein, moderate fat
+      Build Muscle:    high protein, moderate carbs, lower fat
+      Maintain Weight: balanced split
+
+    Falls back to safe generic defaults if profile data is incomplete.
+    """
+
+    # --- Fallback defaults if profile is incomplete ---
+    defaults = {
+        'cal_target':     2000,
+        'protein_target': 80,
+        'carbs_target':   225,
+        'fats_target':    65,
+        'fiber_target':   25,
+    }
+
+    weight = profile.weight_kg
+    height = profile.height_cm
+    age    = profile.age
+
+    if not all([weight, height, age]):
+        return defaults
+
+    # 1. BMR (Mifflin-St Jeor)
+    bmr_male   = 10 * weight + 6.25 * height - 5 * age + 5
+    bmr_female = 10 * weight + 6.25 * height - 5 * age - 161
+
+    if profile.gender == 'male':
+        bmr = bmr_male
+    elif profile.gender == 'female':
+        bmr = bmr_female
+    else:
+        bmr = (bmr_male + bmr_female) / 2
+
+    # 2. Activity multiplier (TDEE)
+    activity_multipliers = {
+        'sedentary':         1.2,
+        'lightly_active':    1.375,
+        'moderately_active': 1.55,
+        'very_active':       1.725,
+    }
+    multiplier = activity_multipliers.get(profile.activity_level, 1.375)
+    tdee = bmr * multiplier
+
+    # 3. Calorie target adjusted for goal
+    goal_adjustments = {
+        'lose_weight':    -500,   # 0.5kg/week deficit
+        'gain_weight':    +500,   # 0.5kg/week surplus
+        'build_muscle':   +250,   # lean bulk
+        'maintain_weight':   0,
+    }
+    cal_target = round(tdee + goal_adjustments.get(profile.goal, 0))
+
+    # 4. Macro split (grams) based on goal
+    # Protein: 4 cal/g  |  Carbs: 4 cal/g  |  Fats: 9 cal/g
+    macro_splits = {
+        #                      protein%  carbs%  fats%
+        'lose_weight':         (0.35,    0.35,   0.30),
+        'gain_weight':         (0.25,    0.50,   0.25),
+        'build_muscle':        (0.35,    0.40,   0.25),
+        'maintain_weight':     (0.25,    0.45,   0.30),
+    }
+    protein_pct, carbs_pct, fats_pct = macro_splits.get(
+        profile.goal, (0.25, 0.45, 0.30)
+    )
+
+    protein_target = round((cal_target * protein_pct) / 4)
+    carbs_target   = round((cal_target * carbs_pct)   / 4)
+    fats_target    = round((cal_target * fats_pct)    / 9)
+
+    # 5. Fiber: general guideline 14g per 1000 kcal
+    fiber_target = round((cal_target / 1000) * 14)
+
+    return {
+        'cal_target':     cal_target,
+        'protein_target': protein_target,
+        'carbs_target':   carbs_target,
+        'fats_target':    fats_target,
+        'fiber_target':   fiber_target,
+    }
+
+
+def get_or_create_today_log(user):
+    """
+    Returns today's DailyLog for the user, creating it if it doesn't exist.
+    Targets are calculated from the user's profile on creation.
+    """
+    today = timezone.localdate()
+    try:
+        profile = user.profile
+        targets = calculate_targets(profile)
+    except UserProfile.DoesNotExist:
+        targets = {
+            'cal_target': 2000, 'protein_target': 80,
+            'carbs_target': 225, 'fats_target': 65, 'fiber_target': 25,
+        }
+
+    log, created = DailyLog.objects.get_or_create(
+        user=user,
+        date=today,
+        defaults=targets,
+    )
+    return log
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +164,8 @@ def signup_view(request):
     """
     Open registration — no existing account required.
     GET  – renders the sign-up form (username + password only, no email).
-    POST – creates the account and logs the user in, then redirects to dashboard.
+    POST – creates the account, creates a blank UserProfile, logs the user
+           in, then redirects to complete_profile so they can fill in details.
     Already-authenticated users are redirected to the dashboard.
     """
     if request.user.is_authenticated:
@@ -48,9 +175,11 @@ def signup_view(request):
         form = UsernameOnlySignupForm(request.POST)
         if form.is_valid():
             user = form.save()
+            # Create a blank profile automatically on sign-up
+            UserProfile.objects.create(user=user)
             login(request, user)
-            messages.success(request, "Welcome! Your account has been created.")
-            return redirect('dashboard')
+            messages.success(request, "Welcome! Let's set up your profile.")
+            return redirect('complete_profile')
         else:
             messages.error(request, "Please correct the errors below.")
     else:
@@ -76,7 +205,8 @@ def login_view(request):
         if user is not None:
             login(request, user)
             messages.success(request, f"Welcome back, {user.username}!")
-            return redirect('dashboard')
+            next_url = request.POST.get('next') or 'dashboard'
+            return redirect(next_url)
         else:
             messages.error(request, "Invalid username or password.")
 
@@ -95,34 +225,51 @@ def logout_view(request):
 
 
 # ---------------------------------------------------------------------------
-# Image Upload  (nutrition analysis)
+# Profile
 # ---------------------------------------------------------------------------
 
 @login_required(login_url='signup')
-def image_upload_view(request):
+def complete_profile_view(request):
     """
-    Lets users upload a food photo for nutrition analysis.
-    GET  – renders the upload form.
-    POST – validates and saves the image, then hands off to the analysis pipeline.
-    Unauthenticated users are redirected to sign up.
+    Lets the user fill in or update their health/nutrition profile.
+    GET  – renders the form pre-filled with existing data.
+    POST – saves the profile and redirects to the dashboard.
+    """
+    profile = get_object_or_404(UserProfile, user=request.user)
 
-    Expects a model like FoodImage with fields: user, image, uploaded_at.
-    Replace the stub below with your actual model import and processing logic.
-    """
     if request.method == 'POST':
-        uploaded_file = request.FILES.get('food_image')
-        if not uploaded_file:
-            messages.error(request, "Please select an image before uploading.")
-            return render(request, 'image_upload.html')
-
-        # Placeholder: persist the image and kick off analysis
-        # food_image = FoodImage.objects.create(user=request.user, image=uploaded_file)
-        # run_nutrition_analysis.delay(food_image.id)   # e.g. a Celery task
-
-        messages.success(request, "Image uploaded! Analysis will appear on your dashboard shortly.")
+        profile.full_name      = request.POST.get('full_name', '').strip()
+        profile.age            = request.POST.get('age') or None
+        profile.gender         = request.POST.get('gender', '')
+        profile.height_cm      = request.POST.get('height_cm') or None
+        profile.weight_kg      = request.POST.get('weight_kg') or None
+        profile.target_weight_kg = request.POST.get('target_weight_kg') or None
+        profile.goal           = request.POST.get('goal', '')
+        profile.diet_type      = request.POST.get('diet_type', '')
+        profile.activity_level = request.POST.get('activity_level', '')
+        profile.profile_complete = True
+        profile.save()
+        messages.success(request, "Profile saved!")
         return redirect('dashboard')
 
-    return render(request, 'image_upload.html')
+    return render(request, 'complete_profile.html', {'profile': profile})
+
+
+@login_required(login_url='signup')
+def profile_view(request):
+    """
+    Displays the user's profile page with stats and recent activity.
+    """
+    profile = get_object_or_404(UserProfile, user=request.user)
+    recent_meals = MealEntry.objects.filter(
+        daily_log__user=request.user
+    ).select_related('daily_log').order_by('-logged_at')[:10]
+
+    context = {
+        'profile': profile,
+        'recent_meals': recent_meals,
+    }
+    return render(request, 'profile.html', context)
 
 
 # ---------------------------------------------------------------------------
@@ -132,21 +279,137 @@ def image_upload_view(request):
 @login_required(login_url='signup')
 def dashboard_view(request):
     """
-    Main dashboard: shows the user's nutrition log, recent uploads, and stats.
+    Main dashboard: today's nutrition totals, meal journal, and recent uploads.
     Unauthenticated users are redirected to sign up.
-
-    Populate `context` with real queryset data once your models are ready.
+    If the user hasn't completed their profile, redirect them there first.
     """
+    profile = get_object_or_404(UserProfile, user=request.user)
+
+    if not profile.profile_complete:
+        messages.info(request, "Please complete your profile first.")
+        return redirect('complete_profile')
+
+    today_log = get_or_create_today_log(request.user)
+    meals     = today_log.meals.all().order_by('logged_at')
+
     context = {
-        'user': request.user,
-        # TODO: add real data, e.g.:
-        # 'recent_logs': NutritionLog.objects.filter(user=request.user).order_by('-date')[:7],
-        # 'today_summary': get_today_summary(request.user),
+        'profile':   profile,
+        'today_log': today_log,
+        'meals':     meals,
     }
     return render(request, 'dashboard.html', context)
 
+
+# ---------------------------------------------------------------------------
+# Meal Logging (called from the dashboard upload modal)
+# ---------------------------------------------------------------------------
+
+@login_required(login_url='signup')
+def log_meal_view(request):
+    """
+    Handles the dashboard meal modal form submission.
+    POST – creates a MealEntry and updates today's DailyLog totals.
+    """
+    if request.method == 'POST':
+        name     = request.POST.get('meal_name', 'Unnamed Meal').strip()
+        calories = int(request.POST.get('calories', 0) or 0)
+        protein  = int(request.POST.get('protein',  0) or 0)
+        carbs    = int(request.POST.get('carbs',    0) or 0)
+        fats     = int(request.POST.get('fats',     0) or 0)
+        fiber    = int(request.POST.get('fiber',    0) or 0)
+
+        today_log = get_or_create_today_log(request.user)
+
+        MealEntry.objects.create(
+            daily_log = today_log,
+            name      = name,
+            calories  = calories,
+            protein_g = protein,
+            carbs_g   = carbs,
+            fats_g    = fats,
+            fiber_g   = fiber,
+        )
+
+        # Update running totals on the daily log
+        today_log.cal_total     += calories
+        today_log.protein_total += protein
+        today_log.carbs_total   += carbs
+        today_log.fats_total    += fats
+        today_log.fiber_total   += fiber
+        today_log.save()
+
+        messages.success(request, f"'{name}' logged successfully.")
+
+    return redirect('dashboard')
+
+
+# ---------------------------------------------------------------------------
+# Image Upload
+# ---------------------------------------------------------------------------
+
+@login_required(login_url='signup')
+def image_upload_view(request):
+    """
+    Lets users upload a food photo for nutrition analysis.
+    GET  – renders the upload form.
+    POST – saves the FoodImage record and redirects to the dashboard.
+    """
+    if request.method == 'POST':
+        uploaded_file = request.FILES.get('food_image')
+        if not uploaded_file:
+            messages.error(request, "Please select an image before uploading.")
+            return render(request, 'image_upload.html')
+
+        FoodImage.objects.create(
+            user   = request.user,
+            image  = uploaded_file,
+            status = 'pending',
+        )
+
+        messages.success(request, "Image uploaded! Analysis will appear on your dashboard shortly.")
+        return redirect('dashboard')
+
+    return render(request, 'image_upload.html')
+
+
+# ---------------------------------------------------------------------------
+# Chatbot
+# ---------------------------------------------------------------------------
+
+@login_required(login_url='signup')
 def chatbot_view(request):
     """
     Chatbot page for nutrition questions and assistance.
+    GET  – loads the full chat history for this user.
+    POST – saves the user message (and eventually the AI reply) to ChatMessage.
     """
-    return render(request, 'chatbot.html')
+    chat_history = ChatMessage.objects.filter(user=request.user).order_by('timestamp')
+
+    if request.method == 'POST':
+        user_message = request.POST.get('message', '').strip()
+        if user_message:
+            # Save user message
+            ChatMessage.objects.create(
+                user    = request.user,
+                role    = 'user',
+                content = user_message,
+            )
+
+            # TODO: call your AI/chatbot service here and save its reply
+            # ai_reply = call_ai(user_message)
+            # ChatMessage.objects.create(user=request.user, role='assistant', content=ai_reply)
+
+            return redirect('chatbot')
+
+    return render(request, 'chatbot.html', {'chat_history': chat_history})
+
+
+@login_required(login_url='signup')
+def clear_chat_view(request):
+    """
+    Deletes the entire chat history for the current user.
+    """
+    if request.method == 'POST':
+        ChatMessage.objects.filter(user=request.user).delete()
+        messages.info(request, "Chat history cleared.")
+    return redirect('chatbot')
