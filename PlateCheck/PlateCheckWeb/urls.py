@@ -24,4 +24,7 @@ urlpatterns = [
     # Chatbot
     path('chatbot/', views.chatbot_view, name='chatbot'),
     path('chatbot/clear/', views.clear_chat_view, name='clear_chat'),
+
+    # BMI Calculator
+    path('bmi/', views.bmi, name='bmi'),
 ]

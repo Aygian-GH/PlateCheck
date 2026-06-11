@@ -105,25 +105,44 @@ def calculate_targets(profile):
     }
     cal_target = round(tdee + goal_adjustments.get(profile.goal, 0))
 
-    # 4. Macro split (grams) based on goal
-    # Protein: 4 cal/g  |  Carbs: 4 cal/g  |  Fats: 9 cal/g
-    macro_splits = {
-        #                      protein%  carbs%  fats%
-        'lose_weight':         (0.35,    0.35,   0.30),
-        'gain_weight':         (0.25,    0.50,   0.25),
-        'build_muscle':        (0.35,    0.40,   0.25),
-        'maintain_weight':     (0.25,    0.45,   0.30),
+    # 4. Macro calculations based on body weight
+
+    goal_configs = {
+        'lose_weight': {
+            'protein_multiplier': 1.5,
+            'fat_multiplier': 0.8
+        },
+        'maintain_weight': {
+            'protein_multiplier': 1.5,
+            'fat_multiplier': 0.9
+        },
+        'gain_weight': {
+            'protein_multiplier': 1.8,
+            'fat_multiplier': 1.0
+        },
+        'build_muscle': {
+            'protein_multiplier': 2.0,
+            'fat_multiplier': 0.9
+        }
     }
-    protein_pct, carbs_pct, fats_pct = macro_splits.get(
-        profile.goal, (0.25, 0.45, 0.30)
+
+    config = goal_configs.get(
+        profile.goal,
+        {
+            'protein_multiplier': 1.6,
+            'fat_multiplier': 0.9
+        }
     )
 
-    protein_target = round((cal_target * protein_pct) / 4)
-    carbs_target   = round((cal_target * carbs_pct)   / 4)
-    fats_target    = round((cal_target * fats_pct)    / 9)
+    protein_target = round(weight * config['protein_multiplier'])
+    fats_target = round(weight * config['fat_multiplier'])
 
-    # 5. Fiber: general guideline 14g per 1000 kcal
-    fiber_target = round((cal_target / 1000) * 14)
+    carbs_target = round(
+        (cal_target - (protein_target * 4) - (fats_target * 9)) / 4
+    )
+
+    # 5. Fiber
+    fiber_target = round(cal_target * 0.014)
 
     return {
         'cal_target':     cal_target,
@@ -252,16 +271,28 @@ def complete_profile_view(request):
 
     if request.method == 'POST':
         profile.full_name      = request.POST.get('full_name', '').strip()
-        profile.age            = request.POST.get('age') or None
+        profile.age            = int(request.POST.get('age')) if request.POST.get('age') else None
         profile.gender         = request.POST.get('gender', '')
-        profile.height_cm      = request.POST.get('height_cm') or None
-        profile.weight_kg      = request.POST.get('weight_kg') or None
-        profile.target_weight_kg = request.POST.get('target_weight_kg') or None
+        profile.height_cm      = float(request.POST.get('height_cm')) if request.POST.get('height_cm') else None
+        profile.weight_kg      = float(request.POST.get('weight_kg')) if request.POST.get('weight_kg') else None
+        profile.target_weight_kg = float(request.POST.get('target_weight_kg')) if request.POST.get('target_weight_kg') else None
         profile.goal           = request.POST.get('goal', '')
         profile.diet_type      = request.POST.get('diet_type', '')
         profile.activity_level = request.POST.get('activity_level', '')
         profile.profile_complete = True
         profile.save()
+
+        # Recalculate today's targets based on updated profile
+        today = timezone.localdate()
+        try:
+            today_log = DailyLog.objects.get(user=request.user, date=today)
+            new_targets = calculate_targets(profile)
+            for key, value in new_targets.items():
+                setattr(today_log, key, value)
+            today_log.save()
+        except DailyLog.DoesNotExist:
+            pass  # Will be created fresh when they hit the dashboard
+
         messages.success(request, "Profile saved!")
         return redirect('dashboard')
 
@@ -451,27 +482,143 @@ def image_upload_view(request):
 @login_required(login_url='signup')
 def chatbot_view(request):
     """
-    Chatbot page for nutrition questions and assistance.
-    GET  – loads the full chat history for this user.
-    POST – saves the user message (and eventually the AI reply) to ChatMessage.
+    Chatbot page for nutrition questions and assistance — powered by Ronnie AI.
+
+    GET  – loads the full chat history for this user and renders the page.
+    POST – accepts a user message (AJAX), gets an AI reply from Groq,
+           persists both messages to ChatMessage, and returns JSON:
+           { "reply": "<assistant response>" }
+
+    The system prompt is enriched with the user's full profile and today's
+    nutrition data so Ronnie can give genuinely personalised advice:
+
+      • Identity      – username, full name, age, gender
+      • Body stats    – weight, height, target weight
+      • Goals         – goal type, diet type, activity level
+      • Daily targets – calorie / protein / carbs / fats / fiber targets
+      • Today's log   – calories and macros consumed so far today
+      • Meal journal  – individual meals logged today (name + calories)
+      • Streak        – current logging streak for motivation context
+
+    Conversation history (last 20 messages) is also passed so Ronnie
+    maintains context across a session.
     """
+    from django.http import JsonResponse
+
     chat_history = ChatMessage.objects.filter(user=request.user).order_by('timestamp')
 
     if request.method == 'POST':
         user_message = request.POST.get('message', '').strip()
-        if user_message:
-            # Save user message
-            ChatMessage.objects.create(
-                user    = request.user,
-                role    = 'user',
-                content = user_message,
+
+        if not user_message:
+            return JsonResponse({'reply': ''}, status=400)
+
+        # ------------------------------------------------------------------
+        # 1. Fetch user profile and today's log
+        # ------------------------------------------------------------------
+        try:
+            profile = request.user.profile
+        except UserProfile.DoesNotExist:
+            profile = None
+
+        today_log = get_or_create_today_log(request.user)
+
+        # Today's individual meals (name + calories, max 10)
+        meals_today = today_log.meals.order_by('logged_at').values('name', 'calories')[:10]
+        meals_summary = ', '.join(
+            f"{m['name']} ({m['calories']} kcal)" for m in meals_today
+        ) or 'None logged yet'
+
+        # ------------------------------------------------------------------
+        # 2. Build a structured JSON context block for the system prompt
+        # ------------------------------------------------------------------
+        user_context = {
+            "username":        request.user.username,
+            "full_name":       getattr(profile, 'full_name', '') or request.user.username,
+            "age":             getattr(profile, 'age', None),
+            "gender":          getattr(profile, 'gender', None),
+            "weight_kg":       getattr(profile, 'weight_kg', None),
+            "height_cm":       getattr(profile, 'height_cm', None),
+            "target_weight_kg":getattr(profile, 'target_weight_kg', None),
+            "goal":            getattr(profile, 'goal', None),
+            "diet_type":       getattr(profile, 'diet_type', None),
+            "activity_level":  getattr(profile, 'activity_level', None),
+            "streak_days":     getattr(profile, 'streak_days', 0),
+            "targets": {
+                "calories": today_log.cal_target,
+                "protein_g": today_log.protein_target,
+                "carbs_g":   today_log.carbs_target,
+                "fats_g":    today_log.fats_target,
+                "fiber_g":   today_log.fiber_target,
+            },
+            "today_consumed": {
+                "calories": today_log.cal_total,
+                "protein_g": today_log.protein_total,
+                "carbs_g":   today_log.carbs_total,
+                "fats_g":    today_log.fats_total,
+                "fiber_g":   today_log.fiber_total,
+            },
+            "meals_today": meals_summary,
+        }
+
+        # ------------------------------------------------------------------
+        # 3. System prompt — identity + nutrition scope + live user data
+        # ------------------------------------------------------------------
+        system_prompt = f"""You are Ronnie AI, a friendly and knowledgeable nutrition assistant \
+built into PlateCheck, a personal nutrition tracking app.
+
+Here is the real-time data for the user you are talking to:
+{json.dumps(user_context, indent=2)}
+
+Use this data to give genuinely personalised advice. For example:
+- Tell them exactly how many calories or macros they have left for the day.
+- Reference their goal (e.g. lose_weight, build_muscle) when making suggestions.
+- Respect their diet type (e.g. vegetarian, vegan) — never suggest foods that conflict with it.
+- Mention their streak to keep them motivated when relevant.
+- If weight or height is missing, give general advice and gently suggest completing their profile.
+
+Your scope is nutrition, food, diet, and health habits only. If a question is completely \
+unrelated, politely redirect the user back to nutrition topics.
+Keep replies concise, warm, and practical. Never make up medical diagnoses. \
+Always suggest consulting a doctor for medical concerns."""
+
+        # ------------------------------------------------------------------
+        # 4. Build conversation history for the model (last 20 messages)
+        # ------------------------------------------------------------------
+        recent_history = chat_history.order_by('-timestamp')[:20]
+        history_for_model = []
+        for msg in reversed(list(recent_history)):
+            role = 'user' if msg.role == 'user' else 'assistant'
+            history_for_model.append({'role': role, 'content': msg.content})
+
+        history_for_model.append({'role': 'user', 'content': user_message})
+
+        # ------------------------------------------------------------------
+        # 5. Call Groq
+        # ------------------------------------------------------------------
+        try:
+            response = GROQ_CLIENT.chat.completions.create(
+                model='llama-3.3-70b-versatile',
+                messages=[
+                    {'role': 'system', 'content': system_prompt},
+                    *history_for_model,
+                ],
+                max_tokens=512,
+                temperature=0.7,
             )
+            ai_reply = response.choices[0].message.content.strip()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Groq chatbot error: {e}", exc_info=True)
+            ai_reply = f"⚠️ Error: {str(e)}"
 
-            # TODO: call your AI/chatbot service here and save its reply
-            # ai_reply = call_ai(user_message)
-            # ChatMessage.objects.create(user=request.user, role='assistant', content=ai_reply)
+        # ------------------------------------------------------------------
+        # 6. Persist both messages
+        # ------------------------------------------------------------------
+        ChatMessage.objects.create(user=request.user, role='user',      content=user_message)
+        ChatMessage.objects.create(user=request.user, role='assistant', content=ai_reply)
 
-            return redirect('chatbot')
+        return JsonResponse({'reply': ai_reply})
 
     return render(request, 'chatbot.html', {'chat_history': chat_history})
 
@@ -485,3 +632,9 @@ def clear_chat_view(request):
         ChatMessage.objects.filter(user=request.user).delete()
         messages.info(request, "Chat history cleared.")
     return redirect('chatbot')
+
+# BMI
+
+@login_required(login_url='signup')
+def bmi(request):
+    return render(request, 'bmi.html')
