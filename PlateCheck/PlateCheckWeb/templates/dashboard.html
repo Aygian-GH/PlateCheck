@@ -42,7 +42,7 @@
             <nav class="flex items-center gap-6 text-sm font-medium text-gray-400">
                 <a href="{% url 'chatbot' %}" class="flex items-center gap-1.5 hover:text-emerald-500 transition"><i data-lucide="message-square" class="w-4 h-4"></i> Chatbot</a>
                 <a href="{% url 'dashboard' %}" class="flex items-center gap-1.5 text-[#22c55e] transition"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard</a>
-                <a href="#" onclick="openUploadModal()" class="flex items-center gap-1.5 hover:text-emerald-500 transition"><i data-lucide="upload-cloud" class="w-4 h-4"></i> Upload Meal</a>
+                <a href="#" onclick="window.location.href={% url 'image_upload' %}" class="flex items-center gap-1.5 hover:text-emerald-500 transition"><i data-lucide="upload-cloud" class="w-4 h-4"></i> Upload Meal</a>
                 <a href="{% url 'profile' %}" class="flex items-center gap-1.5 hover:text-emerald-500 transition"><i data-lucide="user" class="w-4 h-4"></i> Profile</a>
                 <form method="post" action="{% url 'logout' %}" style="display:inline">
                     {% csrf_token %}
@@ -142,14 +142,14 @@
                         <span class="p-1.5 bg-rose-500/10 text-rose-400 rounded-lg"><i data-lucide="heart" class="w-4 h-4"></i></span>
                         Fiber
                     </div>
-                    <div class="text-2xl font-bold text-white tracking-tight">{{ today_log.fiber_total }}g</div>
+                    <div class="text-2xl font-bold text-white tracking-tight" id="fiber-count">{{ today_log.fiber_total }}g</div>
                     <div class="text-[10px] text-gray-500 mt-0.5">of {{ today_log.fiber_target }}g target</div>
                 </div>
                 <div class="mt-4">
                     <div class="w-full bg-[#262a30] h-1.5 rounded-full overflow-hidden">
-                        <div class="bg-rose-500 h-1.5 rounded-full" style="width: {% widthratio today_log.fiber_total today_log.fiber_target 100 %}%"></div>
+                        <div id="fiber-progress" class="bg-rose-500 h-1.5 rounded-full" style="width: {% widthratio today_log.fiber_total today_log.fiber_target 100 %}%"></div>
                     </div>
-                    <div class="text-[10px] font-semibold text-rose-400 mt-1 text-center">{% widthratio today_log.fiber_total today_log.fiber_target 100 %}%</div>
+                    <div id="fiber-pct" class="text-[10px] font-semibold text-rose-400 mt-1 text-center">{% widthratio today_log.fiber_total today_log.fiber_target 100 %}%</div>
                 </div>
             </div>
         </div>
@@ -283,6 +283,7 @@
                     totals.protein += pro;
                     totals.carbs   += carb;
                     totals.fats    += fat;
+                    totals.fiber   += fiber;
                     updateDashboardDOM();
 
                     // Append meal row to journal
@@ -314,21 +315,25 @@
             const pPct    = Math.round((totals.protein / targets.protein) * 100);
             const carbPct = Math.round((totals.carbs   / targets.carbs)   * 100);
             const fPct    = Math.round((totals.fats    / targets.fats)    * 100);
+            const fibPct  = Math.round((totals.fiber   / targets.fiber)   * 100);
 
             document.getElementById('cal-count').innerText     = totals.cal.toLocaleString();
             document.getElementById('protein-count').innerText = totals.protein + 'g';
             document.getElementById('carbs-count').innerText   = totals.carbs + 'g';
             document.getElementById('fats-count').innerText    = totals.fats + 'g';
+            document.getElementById('fiber-count').innerText   = totals.fiber + 'g';
 
             document.getElementById('cal-progress').style.width     = `${Math.min(cPct,    100)}%`;
             document.getElementById('protein-progress').style.width = `${Math.min(pPct,    100)}%`;
             document.getElementById('carbs-progress').style.width   = `${Math.min(carbPct, 100)}%`;
             document.getElementById('fats-progress').style.width    = `${Math.min(fPct,    100)}%`;
+            document.getElementById('fiber-progress').style.width   = `${Math.min(fibPct,  100)}%`;
 
             document.getElementById('cal-pct').innerText     = cPct + '%';
             document.getElementById('protein-pct').innerText = pPct + '%';
             document.getElementById('carbs-pct').innerText   = carbPct + '%';
             document.getElementById('fats-pct').innerText    = fPct + '%';
+            document.getElementById('fiber-pct').innerText   = fibPct + '%';
 
             document.getElementById('total-cal-summary').innerText = `${totals.cal.toLocaleString()} cal`;
         }

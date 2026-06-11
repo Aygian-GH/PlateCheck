@@ -5,3 +5,6 @@ NAIPEnv/
 .vscode/
 Non-Push .bat files/
 test work/
+PlateCheck/db.sqlite3
+.env
+food_images/

@@ -4,8 +4,21 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib import messages
 from django.utils import timezone
+from django.conf import settings
+
+import json
+import base64
+from groq import Groq
+from PIL import Image as PILImage
 
 from .models import UserProfile, DailyLog, MealEntry, FoodImage, ChatMessage
+
+
+# ---------------------------------------------------------------------------
+# Groq setup
+# ---------------------------------------------------------------------------
+
+GROQ_CLIENT = Groq(api_key=settings.GROQ_API_KEY)
 
 
 # ---------------------------------------------------------------------------
@@ -352,7 +365,9 @@ def image_upload_view(request):
     """
     Lets users upload a food photo for nutrition analysis.
     GET  – renders the upload form.
-    POST – saves the FoodImage record and redirects to the dashboard.
+    POST – saves the image, sends it to Gemini Vision for nutrition analysis,
+           stores the result, and returns the data to the frontend as JSON
+           (if AJAX) or renders the page with results.
     """
     if request.method == 'POST':
         uploaded_file = request.FILES.get('food_image')
@@ -360,14 +375,71 @@ def image_upload_view(request):
             messages.error(request, "Please select an image before uploading.")
             return render(request, 'image_upload.html')
 
-        FoodImage.objects.create(
+        # Save image to DB
+        food_image = FoodImage.objects.create(
             user   = request.user,
             image  = uploaded_file,
             status = 'pending',
         )
 
-        messages.success(request, "Image uploaded! Analysis will appear on your dashboard shortly.")
-        return redirect('dashboard')
+        # Run Groq Vision analysis
+        try:
+            prompt = """
+            Analyse this food image and estimate its nutritional content.
+            If there are more than one object in the image, you estimate the collective content.
+            Respond ONLY with a valid JSON object — no markdown, no explanation.
+            Use this exact structure:
+            {
+                "meal_name": "name of the dish",
+                "calories": 0,
+                "protein": 0,
+                "carbs": 0,
+                "fat": 0,
+                "fiber": 0,
+                "sugar": 0,
+                "insight": "brief nutritional insight about the meal"
+            }
+            All numeric values should be integers representing grams (or kcal for calories).
+            """
+
+            uploaded_file.seek(0)
+            image_data = base64.b64encode(uploaded_file.read()).decode('utf-8')
+            mime_type  = uploaded_file.content_type
+
+            response = GROQ_CLIENT.chat.completions.create(
+                model='meta-llama/llama-4-scout-17b-16e-instruct',
+                messages=[
+                    {
+                        'role': 'user',
+                        'content': [
+                            {
+                                'type': 'image_url',
+                                'image_url': {'url': f'data:{mime_type};base64,{image_data}'}
+                            },
+                            {
+                                'type': 'text',
+                                'text': prompt
+                            }
+                        ]
+                    }
+                ],
+                response_format={'type': 'json_object'},
+            )
+            raw = response.choices[0].message.content.strip()
+            nutrition = json.loads(raw)
+
+            # Mark as analysed and store result
+            food_image.status = 'analysed'
+            food_image.analysis_result = json.dumps(nutrition)
+            food_image.save()
+
+        except Exception as e:
+            food_image.status = 'failed'
+            food_image.save()
+            nutrition = None
+            messages.error(request, f"Analysis failed: {str(e)}")
+
+        return render(request, 'image_upload.html', {'nutrition': nutrition})
 
     return render(request, 'image_upload.html')
 
