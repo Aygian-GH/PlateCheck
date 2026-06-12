@@ -326,12 +326,31 @@ def dashboard_view(request):
     Main dashboard: today's nutrition totals, meal journal, and recent uploads.
     Unauthenticated users are redirected to sign up.
     If the user hasn't completed their profile, redirect them there first.
+    Also updates the user's streak based on yesterday's meal activity.
     """
     profile = get_object_or_404(UserProfile, user=request.user)
 
     if not profile.profile_complete:
         messages.info(request, "Please complete your profile first.")
         return redirect('complete_profile')
+
+    # --- Streak logic ---
+    today     = timezone.localdate()
+    yesterday = today - timezone.timedelta(days=1)
+
+    yesterday_log = DailyLog.objects.filter(user=request.user, date=yesterday).first()
+
+    if yesterday_log and yesterday_log.meals.exists():
+        # User logged meals yesterday — increment streak if not already done today
+        today_log_exists = DailyLog.objects.filter(user=request.user, date=today).exists()
+        if not today_log_exists:
+            profile.streak_days += 1
+            profile.save()
+    else:
+        # No meals logged yesterday — reset streak
+        if profile.streak_days > 0:
+            profile.streak_days = 0
+            profile.save()
 
     today_log = get_or_create_today_log(request.user)
     meals     = today_log.meals.all().order_by('logged_at')
