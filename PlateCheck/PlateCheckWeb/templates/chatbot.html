@@ -50,6 +50,12 @@
             gap: 15px;
         }
 
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
         .bot-avatar {
             width: 55px;
             height: 55px;
@@ -275,16 +281,17 @@
                     <p>Nutrition Assistant · PlateCheck</p>
                 </div>
             </div>
-            <!-- Clear chat form -->
-            <form method="POST" action="{% url 'clear_chat' %}" onsubmit="return confirm('Clear all chat history?')">
-                {% csrf_token %}
-                <button type="submit" class="clear-btn">🗑 Clear chat</button>
-            </form>
+            <div class="header-right">
+                <button type="submit" class="clear-btn" onclick="window.location.href='{% url 'dashboard' %}'">Dashboard</button>
+                <form method="POST" action="{% url 'clear_chat' %}" onsubmit="return confirm('Clear all chat history?')">
+                    {% csrf_token %}
+                    <button type="submit" class="clear-btn">🗑 Clear chat</button>
+                </form>
+            </div>
         </div>
 
         <!-- Messages -->
         <div class="chat-body" id="chatBody">
-
             {% if not chat_history %}
                 <div class="empty-state" id="emptyState">
                     <span>🥗</span>
